@@ -1,6 +1,6 @@
 body {
     font-family: 'Segoe UI', Arial, sans-serif;
-    background: linear-gradient(120deg, #e6f2ff 0%, #b2f7ef 100%);
+    background: linear-gradient(120deg, #b3e0ff 0%, #e6f2ff 100%);
     margin: 0;
     padding: 0;
     text-align: center;
@@ -19,7 +19,7 @@ canvas {
     box-shadow: 0 2px 8px rgba(0,0,0,0.10);
     display: block;
     margin: 0 auto 20px auto;
-    border: 2px solid #92a8d1;
+    border: 2px solid #023407;
 }
 #score {
     font-size: 1.3em;

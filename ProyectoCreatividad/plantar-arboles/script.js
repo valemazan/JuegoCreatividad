@@ -5,25 +5,36 @@ const startBtn = document.getElementById('startBtn');
 
 // Imágenes SVG
 const fondo = new Image();
-fondo.src = 'assets/fondo-jardin.svg';
+fondo.src = 'assets/fondo.jpg';
 const arbolImg = new Image();
-arbolImg.src = 'assets/arbol.svg';
+arbolImg.src = 'assets/arbol.png';
+const plantaImg = new Image();
+plantaImg.src = 'assets/planta.png';
 const palaImg = new Image();
 palaImg.src = 'assets/pala.svg';
-const personaImg = new Image();
-personaImg.src = 'assets/persona.svg';
+const jardineroImg = new Image();
+jardineroImg.src = 'assets/jardinero.png';
+const leniadorImg = new Image();
+leniadorImg.src = 'assets/leniador.png';
+const hormigaImg = new Image();
+hormigaImg.src = 'assets/hormiga.png';
+
 
 let gameActive = false;
 let score = 0;
 let arboles = [];
 let taladores = [];
+let hormigas = [];
 let maxArboles = 5;
+let maxHormigas = 5;
 let arbolesPorCiclo = 3;
 let cicloPlantacion = 0;
 let pala = { x: 60, y: 420, w: 40, h: 80, anim: false, animFrame: 0 };
+let jardinero = { x: 0, y: 0, w: 60, h: 100, targetX: 0, targetY: 0, speed: 4 };
 let lastPlantTime = 0;
 let plantCooldown = 1200; // ms
 let taladorInterval;
+let hormigaInterval;
 let taladorSpeed = 2.2;
 let animInterval;
 
@@ -50,10 +61,25 @@ function drawArbol(arbol) {
     ctx.restore();
 }
 
+
+function drawJardinero() {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(jardineroImg, jardinero.x, jardinero.y, jardinero.w, jardinero.h);
+    ctx.restore();
+}
+
 function drawTalador(talador) {
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.drawImage(personaImg, talador.x, talador.y, talador.w, talador.h);
+    ctx.drawImage(leniadorImg, talador.x, talador.y, talador.w, talador.h);
+    ctx.restore();
+}
+
+function drawHormiga(hormiga) {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(hormigaImg, hormiga.x, hormiga.y, hormiga.w, hormiga.h);
     ctx.restore();
 }
 
@@ -84,15 +110,30 @@ function spawnTalador() {
     taladores.push({ x: canvas.width, y, w: 60, h: 100, hit: false });
 }
 
+
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawFondo();
     drawPala();
     arboles.forEach(drawArbol);
     taladores.forEach(drawTalador);
+    hormigas.forEach(drawHormiga);
+    drawJardinero();
     updateArboles();
     updateTaladores();
+    updateHormigas();
+    updateJardinero();
     if (gameActive) requestAnimationFrame(gameLoop);
+}
+function updateJardinero() {
+    // Movimiento suave hacia el objetivo
+    let dx = jardinero.targetX - jardinero.x;
+    let dy = jardinero.targetY - jardinero.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 2) {
+        jardinero.x += dx / dist * jardinero.speed;
+        jardinero.y += dy / dist * jardinero.speed;
+    }
 }
 
 function updateArboles() {
@@ -121,49 +162,34 @@ function updateTaladores() {
     }
 }
 
+
 canvas.addEventListener('click', e => {
     if (!gameActive) return;
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    // Plantar árbol
-    if (my > 340 && arboles.length < maxArboles && Date.now() - lastPlantTime > plantCooldown) {
-        arboles.push({ x: mx - 30, y: 420, w: 60, h: 100, grow: 0.1 });
-        scoreDiv.textContent = 'Árboles plantados: ' + arboles.length;
-        pala.anim = true;
-        pala.animFrame = 0;
-        lastPlantTime = Date.now();
-        setTimeout(() => { pala.anim = false; }, 600);
-    }
-    // Golpear talador
-    for (let i = taladores.length - 1; i >= 0; i--) {
-        const t = taladores[i];
-        if (
-            mx > t.x && mx < t.x + t.w &&
-            my > t.y && my < t.y + t.h
-        ) {
-            taladores.splice(i, 1);
-            pala.anim = true;
-            pala.animFrame = 0;
-            setTimeout(() => { pala.anim = false; }, 400);
-        }
-    }
+    // Mover jardinero a la posición clickeada
+    jardinero.targetX = mx - jardinero.w/2;
+    jardinero.targetY = my - jardinero.h/2;
 });
 
 startBtn.addEventListener('click', resetGame);
 
 // Mensaje inicial
 fondo.onload = () => {
-    ctx.drawImage(fondo, 0, 0, canvas.width, canvas.height);
-    ctx.drawImage(palaImg, pala.x, pala.y, pala.w, pala.h);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawFondo();
+    drawJardinero();
+    drawPala();
     ctx.font = 'bold 32px Segoe UI';
     ctx.fillStyle = '#228B22';
-    ctx.fillText('Haz crecer tu jardín', 300, 120);
+    ctx.fillText('Haz crecer tu jardín', 400, 120);
     ctx.font = 'bold 24px Segoe UI';
     ctx.fillStyle = '#555';
-    ctx.fillText('Haz clic en la tierra para plantar árboles', 220, 180);
-    ctx.fillText('Haz clic en los taladores para ahuyentarlos', 220, 220);
+    ctx.fillText('Haz clic derecho para plantar árbol o planta', 320, 180);
+    ctx.fillText('Haz clic para mover al jardinero', 320, 220);
     ctx.font = 'bold 20px Segoe UI';
     ctx.fillStyle = '#d7263d';
-    ctx.fillText('Presiona "Iniciar Juego"', 340, 320);
+    ctx.fillText('Presiona "Iniciar Juego"', 480, 320);
+    startBtn.style.display = 'block';
 };
