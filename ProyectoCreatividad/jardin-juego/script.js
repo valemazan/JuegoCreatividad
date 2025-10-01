@@ -1,25 +1,43 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
 const scoreDiv = document.getElementById('score');
 const startBtn = document.getElementById('startBtn');
 
-// Imágenes
-const campoImg = new Image();
-campoImg.src = 'assets/fondo.jpg';
-// Sonidos
-const sndPlantar = new Audio('assets/plantar.mp3');
-const sndMalvado = new Audio('assets/malvado.mp3');
-const sndMover = new Audio('assets/mover.mp3');
-const jardineroImg = new Image();
-jardineroImg.src = 'assets/jardinero.png';
-const arbolImg = new Image();
-arbolImg.src = 'assets/arbol.png';
-const plantaImg = new Image();
-plantaImg.src = 'assets/planta.png';
-const leniadorImg = new Image();
-leniadorImg.src = 'assets/leniador.png';
-const hormigaImg = new Image();
-hormigaImg.src = 'assets/hormiga.png';
+// Configuración de Three.js
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+
+const camera = new THREE.PerspectiveCamera(45, 1200/700, 0.1, 2000);
+camera.position.set(0, 800, 600);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(1200, 700);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+// Iluminación
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(100, 200, 100);
+directionalLight.castShadow = true;
+directionalLight.shadow.camera.left = -600;
+directionalLight.shadow.camera.right = 600;
+directionalLight.shadow.camera.top = 400;
+directionalLight.shadow.camera.bottom = -400;
+directionalLight.shadow.mapSize.width = 2048;
+directionalLight.shadow.mapSize.height = 2048;
+scene.add(directionalLight);
+
+// Plano del suelo
+const groundGeometry = new THREE.PlaneGeometry(1200, 700);
+const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
 
 let gameActive = false;
 let scoreArbol = 0;
@@ -27,87 +45,241 @@ let scorePlanta = 0;
 let arboles = [];
 let plantas = [];
 let malvados = [];
-let jardinero = { x: 100, y: 600, w: 80, h: 100, moving: false, target: null };
+let jardinero = { x: -400, z: 250, mesh: null, moving: false, target: null, attackTarget: null };
 let malvadoInterval;
 let gameEnd = false;
+let hasPlanted = false;
+let contextMenu = null;
 
-function drawFondo() {
-    ctx.drawImage(campoImg, 0, 0, canvas.width, canvas.height);
+// Raycaster para clics
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// Crear jardinero 3D
+function createJardinero() {
+    const group = new THREE.Group();
+    
+    // Cuerpo
+    const bodyGeometry = new THREE.BoxGeometry(40, 60, 30);
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = 30;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Cabeza
+    const headGeometry = new THREE.SphereGeometry(15);
+    const headMaterial = new THREE.MeshStandardMaterial({ color: 0xFFDBAC });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.y = 70;
+    head.castShadow = true;
+    group.add(head);
+    
+    // Sombrero
+    const hatGeometry = new THREE.ConeGeometry(18, 15, 8);
+    const hatMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const hat = new THREE.Mesh(hatGeometry, hatMaterial);
+    hat.position.y = 85;
+    hat.castShadow = true;
+    group.add(hat);
+    
+    group.position.set(jardinero.x, 0, jardinero.z);
+    scene.add(group);
+    jardinero.mesh = group;
 }
 
-function drawJardinero() {
-    ctx.drawImage(jardineroImg, jardinero.x, jardinero.y, jardinero.w, jardinero.h);
+// Crear árbol 3D
+function createArbol(x, z) {
+    const group = new THREE.Group();
+    
+    // Tronco
+    const trunkGeometry = new THREE.CylinderGeometry(15, 15, 80);
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.y = 40;
+    trunk.castShadow = true;
+    group.add(trunk);
+    
+    // Hojas
+    const leavesGeometry = new THREE.SphereGeometry(50);
+    const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+    leaves.position.y = 100;
+    leaves.castShadow = true;
+    group.add(leaves);
+    
+    group.position.set(x, 0, z);
+    scene.add(group);
+    return { x, z, mesh: group };
 }
 
-function drawArbol(arbol) {
-    ctx.drawImage(arbolImg, arbol.x, arbol.y, arbol.w, arbol.h);
+// Crear planta 3D
+function createPlanta(x, z) {
+    const group = new THREE.Group();
+    
+    // Tallo
+    const stemGeometry = new THREE.CylinderGeometry(2, 2, 20);
+    const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+    const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+    stem.position.y = 10;
+    stem.castShadow = true;
+    group.add(stem);
+    
+    // Flor
+    const flowerGeometry = new THREE.SphereGeometry(10);
+    const flowerMaterial = new THREE.MeshStandardMaterial({ color: 0xFF69B4 });
+    const flower = new THREE.Mesh(flowerGeometry, flowerMaterial);
+    flower.position.y = 25;
+    flower.castShadow = true;
+    group.add(flower);
+    
+    group.position.set(x, 0, z);
+    scene.add(group);
+    return { x, z, mesh: group };
 }
 
-function drawPlanta(planta) {
-    ctx.drawImage(plantaImg, planta.x, planta.y, planta.w, planta.h);
-}
-
-function drawMalvado(malvado) {
-    ctx.drawImage(malvado.tipo === 'leniador' ? leniadorImg : hormigaImg, malvado.x, malvado.y, malvado.w, malvado.h);
+// Crear malvado 3D (enemigo)
+function createMalvado(tipo, x, z) {
+    const group = new THREE.Group();
+    
+    if (tipo === 'leniador') {
+        // Cuerpo
+        const bodyGeometry = new THREE.BoxGeometry(35, 50, 25);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x8B0000 });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 25;
+        body.castShadow = true;
+        group.add(body);
+        
+        // Cabeza
+        const headGeometry = new THREE.SphereGeometry(12);
+        const headMaterial = new THREE.MeshStandardMaterial({ color: 0xFFDBAC });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.y = 55;
+        head.castShadow = true;
+        group.add(head);
+        
+        // Mango del hacha
+        const axeHandleGeometry = new THREE.CylinderGeometry(2, 2, 40);
+        const axeHandleMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        const axeHandle = new THREE.Mesh(axeHandleGeometry, axeHandleMaterial);
+        axeHandle.position.set(20, 30, 0);
+        axeHandle.rotation.z = Math.PI / 4;
+        axeHandle.castShadow = true;
+        group.add(axeHandle);
+    } else {
+        // Cuerpo de hormiga
+        const bodyGeometry = new THREE.SphereGeometry(15, 8, 8);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 10;
+        body.castShadow = true;
+        group.add(body);
+        
+        // Cabeza de hormiga
+        const headGeometry = new THREE.SphereGeometry(10, 8, 8);
+        const head = new THREE.Mesh(headGeometry, bodyMaterial);
+        head.position.set(18, 10, 0);
+        head.castShadow = true;
+        group.add(head);
+    }
+    
+    group.position.set(x, 0, z);
+    group.userData.clickable = true;
+    scene.add(group);
+    return { tipo, x, z, mesh: group };
 }
 
 function resetGame() {
     scoreArbol = 0;
     scorePlanta = 0;
+    hasPlanted = false;
+    
+    // Remover objetos existentes
+    arboles.forEach(a => scene.remove(a.mesh));
+    plantas.forEach(p => scene.remove(p.mesh));
+    malvados.forEach(m => scene.remove(m.mesh));
+    if (jardinero.mesh) scene.remove(jardinero.mesh);
+    
+    // Limpiar menú contextual si existe
+    if (contextMenu && document.body.contains(contextMenu)) {
+        document.body.removeChild(contextMenu);
+        contextMenu = null;
+    }
+    
     arboles = [];
     plantas = [];
     malvados = [];
-    jardinero.x = 100;
-    jardinero.y = 600;
+    jardinero.x = -400;
+    jardinero.z = 250;
     jardinero.moving = false;
     jardinero.target = null;
+    jardinero.attackTarget = null;
+    
+    createJardinero();
+    
     scoreDiv.textContent = 'Árboles: 0 | Plantas: 0';
     startBtn.style.display = 'none';
     gameActive = true;
     gameEnd = false;
     clearInterval(malvadoInterval);
-    // Espera unos segundos antes de que aparezcan los malvados
+    
     setTimeout(() => {
         malvadoInterval = setInterval(spawnMalvado, 4000);
     }, 6000);
-    requestAnimationFrame(gameLoop);
+    
+    animate();
 }
 
 function spawnMalvado() {
     if (!gameActive) return;
-    // Alterna entre leniador y hormiga
     const tipo = Math.random() < 0.5 ? 'leniador' : 'hormiga';
-    const x = canvas.width - 100;
-    const y = 100 + Math.random() * 500;
-    malvados.push({ tipo, x, y, w: tipo === 'leniador' ? 80 : 40, h: tipo === 'leniador' ? 100 : 40 });
+    const x = 500;
+    const z = -250 + Math.random() * 500;
+    const malvado = createMalvado(tipo, x, z);
+    malvados.push(malvado);
 }
 
-function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawFondo();
-    drawJardinero();
-    arboles.forEach(drawArbol);
-    plantas.forEach(drawPlanta);
-    malvados.forEach(drawMalvado);
+function animate() {
+    if (!gameActive && !gameEnd) return;
+    
     updateJardinero();
     updateMalvados();
+    
+    renderer.render(scene, camera);
+    
     if (gameEnd) return;
-    if (gameActive) requestAnimationFrame(gameLoop);
+    if (gameActive) requestAnimationFrame(animate);
 }
 
 function updateJardinero() {
     if (jardinero.moving && jardinero.target) {
         const dx = jardinero.target.x - jardinero.x;
-        const dy = jardinero.target.y - jardinero.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const dz = jardinero.target.z - jardinero.z;
+        const dist = Math.sqrt(dx*dx + dz*dz);
         if (dist < 5) {
             jardinero.x = jardinero.target.x;
-            jardinero.y = jardinero.target.y;
+            jardinero.z = jardinero.target.z;
+            jardinero.mesh.position.set(jardinero.x, 0, jardinero.z);
             jardinero.moving = false;
             jardinero.target = null;
+            
+            // Verificar si hay un objetivo de ataque para eliminar
+            if (jardinero.attackTarget) {
+                const index = malvados.indexOf(jardinero.attackTarget);
+                if (index !== -1) {
+                    scene.remove(malvados[index].mesh);
+                    malvados.splice(index, 1);
+                    sndMalvado.currentTime = 0;
+                    sndMalvado.play();
+                }
+                jardinero.attackTarget = null;
+            }
         } else {
-            jardinero.x += dx/dist * 6;
-            jardinero.y += dy/dist * 6;
+            // El oso se mueve más rápido que los enemigos (velocidad 7 vs máximo enemigo 3)
+            jardinero.x += dx/dist * 7;
+            jardinero.z += dz/dist * 7;
+            jardinero.mesh.position.set(jardinero.x, 0, jardinero.z);
         }
     }
 }
@@ -115,167 +287,237 @@ function updateJardinero() {
 function updateMalvados() {
     for (let i = malvados.length - 1; i >= 0; i--) {
         if (malvados[i].tipo === 'leniador') {
-            // El leniador avanza hacia el árbol más cercano
-            let target = arboles[0];
+            // Encontrar el árbol más cercano
+            let target = null;
+            let minDist = Infinity;
+            for (let tree of arboles) {
+                const dx = tree.x - malvados[i].x;
+                const dz = tree.z - malvados[i].z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < minDist) {
+                    minDist = dist;
+                    target = tree;
+                }
+            }
+            
             if (target) {
                 const dx = target.x - malvados[i].x;
-                const dy = target.y - malvados[i].y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                const dz = target.z - malvados[i].z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
                 if (dist < 10) {
+                    scene.remove(target.mesh);
                     arboles.splice(arboles.indexOf(target), 1);
                     scoreArbol--;
                     scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
+                    scene.remove(malvados[i].mesh);
                     malvados.splice(i, 1);
                     continue;
                 } else {
                     malvados[i].x += dx/dist * 3;
-                    malvados[i].y += dy/dist * 3;
+                    malvados[i].z += dz/dist * 3;
+                    malvados[i].mesh.position.set(malvados[i].x, 0, malvados[i].z);
                 }
             } else {
                 malvados[i].x -= 2;
+                malvados[i].mesh.position.x = malvados[i].x;
             }
         } else {
-            // La hormiga avanza hacia la planta más cercana
-            let target = plantas[0];
+            // Encontrar la planta más cercana
+            let target = null;
+            let minDist = Infinity;
+            for (let plant of plantas) {
+                const dx = plant.x - malvados[i].x;
+                const dz = plant.z - malvados[i].z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < minDist) {
+                    minDist = dist;
+                    target = plant;
+                }
+            }
+            
             if (target) {
                 const dx = target.x - malvados[i].x;
-                const dy = target.y - malvados[i].y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                const dz = target.z - malvados[i].z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
                 if (dist < 10) {
+                    scene.remove(target.mesh);
                     plantas.splice(plantas.indexOf(target), 1);
                     scorePlanta--;
                     scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
+                    scene.remove(malvados[i].mesh);
                     malvados.splice(i, 1);
                     continue;
                 } else {
                     malvados[i].x += dx/dist * 2.5;
-                    malvados[i].y += dy/dist * 2.5;
+                    malvados[i].z += dz/dist * 2.5;
+                    malvados[i].mesh.position.set(malvados[i].x, 0, malvados[i].z);
                 }
             } else {
                 malvados[i].x -= 2.5;
+                malvados[i].mesh.position.x = malvados[i].x;
             }
         }
-        // Si sale de la pantalla
-        if (malvados[i].x < -100) malvados.splice(i, 1);
+        
+        if (malvados[i] && malvados[i].x < -700) {
+            scene.remove(malvados[i].mesh);
+            malvados.splice(i, 1);
+        }
     }
-    // Condición de derrota SOLO si ya plantaste algo
-    if ((scoreArbol > 0 || scorePlanta > 0) && scoreArbol <= 0 && scorePlanta <= 0 && (arboles.length === 0 && plantas.length === 0)) {
+    
+    if (hasPlanted && arboles.length === 0 && plantas.length === 0) {
         endGame(false);
     }
 }
 
-canvas.addEventListener('click', e => {
+// Manejador de clics
+renderer.domElement.addEventListener('click', e => {
     if (!gameActive) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    // Mover jardinero
-    jardinero.target = { x: mx - jardinero.w/2, y: my - jardinero.h/2 };
-    jardinero.moving = true;
-    sndMover.currentTime = 0;
-    sndMover.play();
-    // Mostrar mensaje de movimiento
-    ctx.save();
-    ctx.font = 'bold 18px Segoe UI';
-    ctx.fillStyle = '#228B22';
-    ctx.fillText('Moverme aquí', mx, my - 10);
-    ctx.restore();
-});
-
-canvas.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    if (!gameActive) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    // Opciones de plantar
-    const menu = document.createElement('div');
-    menu.style.position = 'absolute';
-    menu.style.left = `${mx + 10}px`;
-    menu.style.top = `${my + 10}px`;
-    menu.style.background = '#fff';
-    menu.style.border = '2px solid #228B22';
-    menu.style.borderRadius = '8px';
-    menu.style.padding = '8px';
-    menu.style.zIndex = 1000;
-    menu.innerHTML = '<button id="plantArbol">Plantar Árbol</button><br><button id="plantPlanta">Plantar Planta</button>';
-    document.body.appendChild(menu);
-    document.getElementById('plantArbol').onclick = () => {
-      //  arboles.push({ x: mx - 40, y: my - 100, w: 80, h: 100 });
-        arboles.push({ x: mx - 40, y: my - 100, w: 120, h: 160 }); // árbol más grande
-        scoreArbol++;
-        scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
-        sndPlantar.currentTime = 0;
-        sndPlantar.play();
-        document.body.removeChild(menu);
-    };
-    document.getElementById('plantPlanta').onclick = () => {
-        plantas.push({ x: mx - 20, y: my - 40, w: 40, h: 40 });
-        scorePlanta++;
-        scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
-        sndPlantar.currentTime = 0;
-        sndPlantar.play();
-        document.body.removeChild(menu);
-    };
-    // Cerrar menú si se hace click fuera
-    setTimeout(() => {
-        document.addEventListener('click', function handler(ev) {
-            if (!menu.contains(ev.target)) {
-                if (document.body.contains(menu)) document.body.removeChild(menu);
-                document.removeEventListener('click', handler);
+    
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    
+    // Verificar si se hizo clic en un enemigo
+    const enemyMeshes = malvados.map(m => m.mesh);
+    const enemyIntersects = raycaster.intersectObjects(enemyMeshes, true);
+    
+    if (enemyIntersects.length > 0) {
+        // Encontrar qué enemigo fue clickeado
+        for (let i = 0; i < malvados.length; i++) {
+            if (enemyIntersects[0].object.parent === malvados[i].mesh) {
+                // Establecer enemigo como objetivo de ataque y mover al oso a la posición del enemigo
+                jardinero.attackTarget = malvados[i];
+                jardinero.target = { x: malvados[i].x, z: malvados[i].z };
+                jardinero.moving = true;
+                sndMover.currentTime = 0;
+                sndMover.play();
+                return;
             }
-        });
-    }, 100);
-});
-
-canvas.addEventListener('mousedown', e => {
-    if (!gameActive) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    // Eliminar malvados
-    for (let i = malvados.length - 1; i >= 0; i--) {
-        const m = malvados[i];
-        if (mx > m.x && mx < m.x + m.w && my > m.y && my < m.y + m.h) {
-            malvados.splice(i, 1);
-            sndMalvado.currentTime = 0;
-            sndMalvado.play();
         }
     }
+    
+    // Mover jardinero a posición del suelo (cancela cualquier ataque)
+    const intersects = raycaster.intersectObject(ground);
+    if (intersects.length > 0) {
+        const point = intersects[0].point;
+        jardinero.target = { x: point.x, z: point.z };
+        jardinero.moving = true;
+        jardinero.attackTarget = null; // Cancelar ataque
+        sndMover.currentTime = 0;
+        sndMover.play();
+    }
 });
+
+// Manejador de clic derecho
+renderer.domElement.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (!gameActive) return;
+    
+    // Limpiar menú existente si hay alguno
+    if (contextMenu && document.body.contains(contextMenu)) {
+        document.body.removeChild(contextMenu);
+        contextMenu = null;
+    }
+    
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(ground);
+    
+    if (intersects.length > 0) {
+        const point = intersects[0].point;
+        
+        contextMenu = document.createElement('div');
+        contextMenu.style.position = 'absolute';
+        contextMenu.style.left = `${e.clientX + 10}px`;
+        contextMenu.style.top = `${e.clientY + 10}px`;
+        contextMenu.style.background = '#fff';
+        contextMenu.style.border = '2px solid #228B22';
+        contextMenu.style.borderRadius = '8px';
+        contextMenu.style.padding = '8px';
+        contextMenu.style.zIndex = 1000;
+        contextMenu.innerHTML = '<button id="plantArbol">Plantar Árbol</button><br><button id="plantPlanta">Plantar Planta</button>';
+        document.body.appendChild(contextMenu);
+        
+        document.getElementById('plantArbol').onclick = () => {
+            const arbol = createArbol(point.x, point.z);
+            arboles.push(arbol);
+            scoreArbol++;
+            hasPlanted = true;
+            scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
+            sndPlantar.currentTime = 0;
+            sndPlantar.play();
+            document.body.removeChild(contextMenu);
+            contextMenu = null;
+        };
+        
+        document.getElementById('plantPlanta').onclick = () => {
+            const planta = createPlanta(point.x, point.z);
+            plantas.push(planta);
+            scorePlanta++;
+            hasPlanted = true;
+            scoreDiv.textContent = `Árboles: ${scoreArbol} | Plantas: ${scorePlanta}`;
+            sndPlantar.currentTime = 0;
+            sndPlantar.play();
+            document.body.removeChild(contextMenu);
+            contextMenu = null;
+        };
+        
+        setTimeout(() => {
+            document.addEventListener('click', function handler(ev) {
+                if (contextMenu && !contextMenu.contains(ev.target)) {
+                    if (document.body.contains(contextMenu)) {
+                        document.body.removeChild(contextMenu);
+                        contextMenu = null;
+                    }
+                    document.removeEventListener('click', handler);
+                }
+            });
+        }, 100);
+    }
+});
+
+let gameOverlay = null;
 
 function endGame(win) {
     gameActive = false;
     gameEnd = true;
     clearInterval(malvadoInterval);
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = win ? '#b2f7ef' : '#d7263d';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.globalAlpha = 1;
-    ctx.font = 'bold 60px Segoe UI';
-    ctx.fillStyle = win ? '#228B22' : '#fff';
-    ctx.fillText(win ? '¡Ganaste! El jardín está protegido.' : '¡Perdiste! Los malvados destruyeron tu jardín.', 120, 350);
+    
+    // Crear superposición
+    gameOverlay = document.createElement('div');
+    gameOverlay.style.position = 'absolute';
+    gameOverlay.style.top = '0';
+    gameOverlay.style.left = '0';
+    gameOverlay.style.width = '100%';
+    gameOverlay.style.height = '100%';
+    gameOverlay.style.background = win ? 'rgba(178, 247, 239, 0.85)' : 'rgba(215, 38, 61, 0.85)';
+    gameOverlay.style.display = 'flex';
+    gameOverlay.style.alignItems = 'center';
+    gameOverlay.style.justifyContent = 'center';
+    gameOverlay.style.fontSize = '48px';
+    gameOverlay.style.fontWeight = 'bold';
+    gameOverlay.style.color = win ? '#228B22' : '#fff';
+    gameOverlay.style.textAlign = 'center';
+    gameOverlay.style.padding = '20px';
+    gameOverlay.textContent = win ? '¡Ganaste! El jardín está protegido.' : '¡Perdiste! Los malvados destruyeron tu jardín.';
+    container.appendChild(gameOverlay);
+    
     startBtn.textContent = win ? 'Jugar de nuevo' : 'Intentar otra vez';
     startBtn.style.display = 'inline-block';
-    ctx.restore();
 }
 
-startBtn.addEventListener('click', resetGame);
+startBtn.addEventListener('click', () => {
+    if (gameOverlay && container.contains(gameOverlay)) {
+        container.removeChild(gameOverlay);
+        gameOverlay = null;
+    }
+    resetGame();
+});
 
-// Mensaje inicial
-fondo.onload = () => {
-    ctx.drawImage(fondo, 0, 0, canvas.width, canvas.height);
-    ctx.drawImage(jardineroImg, jardinero.x, jardinero.y, jardinero.w, jardinero.h);
-    ctx.font = 'bold 48px Segoe UI';
-    ctx.fillStyle = '#228B22';
-    ctx.fillText('Cuida el jardín', 400, 120);
-    ctx.font = 'bold 32px Segoe UI';
-    ctx.fillStyle = '#555';
-    ctx.fillText('Haz click para mover al jardinero', 320, 180);
-    ctx.fillText('Click derecho para plantar árbol o planta', 320, 220);
-    ctx.fillText('Haz click en los malvados para eliminarlos', 320, 260);
-    ctx.font = 'bold 28px Segoe UI';
-    ctx.fillStyle = '#d7263d';
-    ctx.fillText('Presiona "Iniciar Juego"', 500, 320);
-};
+// Renderizado inicial
+renderer.render(scene, camera);
