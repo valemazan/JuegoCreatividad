@@ -38,6 +38,9 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+const sndPlantar = new Audio('assets/plantar.mp3');
+const sndMalvado = new Audio('assets/malvado.mp3');
+const sndMover = new Audio('assets/mover.mp3');
 
 let gameActive = false;
 let scoreArbol = 0;
