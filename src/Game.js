@@ -11,7 +11,10 @@ export class Game {
     this.lumberjacks = [];
     this.projectiles = [];
     this.treesAlive = 0;
-    this.timeLeft = 45; // segundos
+    //this.timeLeft = 45; //
+    this.initialTimeLeft = 15; // segundos (ajustable)
+    this.timeLeft = this.initialTimeLeft;
+
     this.lumberjackInterval = 3; // cada 3 segundos
     this.lastLumberjack = 0;
     this.gameOver = false;
@@ -65,6 +68,8 @@ export class Game {
   window.addEventListener('contextmenu', e => e.preventDefault());
     // attempt to remove any leftover debug/red boxes that may persist from earlier runs
     try { this.removeDebugObjects(); } catch (e) { /* ignore */ }
+     // crear overlay central para mostrar mensaje de fin y botón de reinicio
+    this._createGameOverOverlay();
   }
 
   start() {
@@ -193,12 +198,17 @@ export class Game {
   updateUI() {
     this.uiTrees.textContent = `Árboles: ${this.treesAlive}`;
     this.uiTime.textContent = `Tiempo: ${Math.max(0, Math.floor(this.timeLeft))}`;
+
     if (this.gameOver) {
       this.uiMsg.textContent = this.win ? '¡Ganaste! El bosque está a salvo.' : '¡Perdiste! Los leñadores arrasaron el bosque.';
       document.getElementById('ui').className = this.win ? 'win' : 'lose';
+      // mostrar overlay central con botón de reinicio
+      if (this._overlay) this._showGameOverOverlay(this.uiMsg.textContent);
     } else {
       this.uiMsg.textContent = '';
       document.getElementById('ui').className = '';
+      // ocultar overlay si está visible
+      if (this._overlay) this._hideGameOverOverlay();
     }
   }
 
@@ -287,5 +297,105 @@ export class Game {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     this.renderer.domElement.addEventListener('wheel', onWheel);
+  }
+
+    _createGameOverOverlay() {
+    if (document.getElementById('game-over-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'game-over-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.fontFamily = 'Arial';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '9999';
+
+    const box = document.createElement('div');
+    box.style.minWidth = '320px';
+    box.style.maxWidth = '90%';
+    box.style.padding = '24px';
+    box.style.borderRadius = '12px';
+    box.style.textAlign = 'center';
+    box.style.background = 'rgba(241, 239, 239, 0.9)';
+    box.style.boxShadow = '0 6px 24px rgba(0,0,0,0.3)';
+    box.style.pointerEvents = 'auto';
+
+    const msg = document.createElement('div');
+    msg.id = 'game-over-message';
+    msg.style.fontSize = '22px';
+    msg.style.fontWeight = '700';
+    msg.style.color = '#222';
+    msg.style.marginBottom = '16px';
+
+    const btn = document.createElement('button');
+    btn.id = 'game-over-restart';
+    btn.textContent = 'Jugar de nuevo';
+    btn.style.padding = '10px 18px';
+    btn.style.fontSize = '16px';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '8px';
+    btn.style.cursor = 'pointer';
+    btn.style.background = '#f9a60bff';
+    btn.style.color = '#fdfbfbff';
+
+    btn.addEventListener('click', () => {
+      try { this.reset(); } catch (e) { console.warn(e); }
+    });
+
+    box.appendChild(msg);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    overlay.style.display = 'none';
+    document.body.appendChild(overlay);
+    this._overlay = overlay;
+    this._overlayMsg = msg;
+    this._overlayBtn = btn;
+  }
+
+  _showGameOverOverlay(text) {
+    if (!this._overlay) this._createGameOverOverlay();
+    this._overlayMsg.textContent = text || '';
+    this._overlay.style.display = 'flex';
+    this._overlay.style.pointerEvents = 'auto';
+  }
+
+  _hideGameOverOverlay() {
+    if (!this._overlay) return;
+    this._overlay.style.display = 'none';
+    this._overlay.style.pointerEvents = 'none';
+  }
+
+  reset() {
+    // limpiar árboles
+    for (const t of [...this.trees]) {
+      try { this.scene.remove(t.group); } catch(e) {}
+    }
+    // limpiar leñadores
+    for (const l of [...this.lumberjacks]) {
+      try { this.scene.remove(l.mesh); } catch(e) {}
+    }
+    // limpiar proyectiles
+    for (const p of [...this.projectiles]) {
+      try { this.scene.remove(p.mesh); } catch(e) {}
+    }
+    // reset arrays y estado
+    this.trees = [];
+    this.lumberjacks = [];
+    this.projectiles = [];
+    this.treesAlive = 0;
+    this.gameOver = false;
+    this.win = false;
+    this.timeLeft = this.initialTimeLeft;
+    this.lastLumberjack = performance.now();
+    this.lastTime = performance.now();
+    // respawnear árboles iniciales y ocultar overlay
+    this.spawnInitialTrees();
+    this._hideGameOverOverlay();
+    this.updateUI();
   }
 }
