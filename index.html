@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Jardín Protector - Three.js</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { z-index: 1; display: block; }
+    #ui {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 20;
+      background: rgba(255,255,255,0.9);
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      font-size: 18px;
+    }
+    #ui span { margin-right: 20px; }
+    #ui.win { background: #118908; color: #f1f1f1; }
+    #ui.lose { background: #a31c1c; color: #f1f1f1; }
+    #audioToggle {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(240, 188, 35, 0.9);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    #audioToggle[aria-pressed="true"] { background: rgba(237, 127, 49, 0.9); }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <span id="trees">Árboles: 0</span>
+    <span id="time">Tiempo: 0</span>
+    <span id="msg"></span>
+    <!-- botón para activar/desactivar audio -->
+    <button id="audioToggle" aria-pressed="false">Activar sonido</button>
+  </div>
+
+  <!-- agrega sonido de fondo -->
+  <audio id="bgAudio" src="./sonido_aves.mp3" loop preload="auto"></audio>
+
+  <!-- sonido al arrojar / click derecho -->
+  <audio id="throwSound" src="./sonido-arrojar.mp3" preload="auto"></audio>
+
+  <script type="module" src="src/main.js"></script>
+  <script src="https://unpkg.com/three@0.155.0/build/three.min.js"></script>
+  <script type="module" src="src/main.js"></script>
+
+  <!-- Carga Three.js como script clásico para exponer window.THREE -->
+  <script src="https://unpkg.com/three@0.155.0/build/three.min.js"></script>
+</body>
+</html>
