@@ -53,7 +53,12 @@ export class Game {
     this.environment = new Environment(this.scene);
     this.player = new Player(this);
   // Mensaje de estado inicial
-  try { document.getElementById('msg').textContent = 'Click izquierdo: plantar / disparo. Click derecho: lanzar semilla (sniper).'; } catch(e) {}
+  // NOTA: no escribimos el mensaje de resultado en la UI superior.
+  // Si quieres mostrar instrucciones iniciales, crea un elemento específico (por ejemplo #instructions).
+  try {
+    const instructions = document.getElementById('instructions');
+    if (instructions) instructions.textContent = 'Click izquierdo: plantar / disparo. Click derecho: lanzar semilla (sniper).';
+  } catch(e) {}
 
   // Asegurar que la cámara mira al origen
   this.camera.lookAt(0, 0, 0);
@@ -200,14 +205,12 @@ export class Game {
     this.uiTime.textContent = `Tiempo: ${Math.max(0, Math.floor(this.timeLeft))}`;
 
     if (this.gameOver) {
-      this.uiMsg.textContent = this.win ? '¡Ganaste! El bosque está a salvo.' : '¡Perdiste! Los leñadores arrasaron el bosque.';
+      // mostramos el resultado SOLO en el overlay central
       document.getElementById('ui').className = this.win ? 'win' : 'lose';
-      // mostrar overlay central con botón de reinicio
-      if (this._overlay) this._showGameOverOverlay(this.uiMsg.textContent);
+      if (this._overlay) this._showGameOverOverlay(this.win ? '¡Ganaste! El bosque está a salvo.' : '¡Perdiste! Los leñadores arrasaron el bosque.');
     } else {
-      this.uiMsg.textContent = '';
+      // durante el juego no mostramos texto de resultado en la UI superior
       document.getElementById('ui').className = '';
-      // ocultar overlay si está visible
       if (this._overlay) this._hideGameOverOverlay();
     }
   }
@@ -340,7 +343,7 @@ export class Game {
     btn.style.border = 'none';
     btn.style.borderRadius = '8px';
     btn.style.cursor = 'pointer';
-    btn.style.background = '#f9a60bff';
+    btn.style.background = '#dd940cff';
     btn.style.color = '#fdfbfbff';
 
     btn.addEventListener('click', () => {
